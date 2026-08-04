@@ -414,9 +414,9 @@ static void MX_TIM6_Init(void)
 
   /* USER CODE END TIM6_Init 1 */
   htim6.Instance = TIM6;
-  htim6.Init.Prescaler = 1999;
+  htim6.Init.Prescaler = 79;
   htim6.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim6.Init.Period = 39999;
+  htim6.Init.Period = 999;
   htim6.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim6) != HAL_OK)
   {
@@ -516,7 +516,7 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE BEGIN 4 */
 
-//運動学オムニ
+//逆運動学オムニ
 void OmniKinematics(void){
   motor_speed_A = INV_SQRT_2 * (Vx - Vy) - omega * R;
   motor_speed_B = INV_SQRT_2 * (Vx + Vy) - omega * R;
