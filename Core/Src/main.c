@@ -56,7 +56,7 @@ volatile float Vy = 0.0f;
 volatile float omega = 0.0f;
 
 //車体中心からオムニまでの長さ
-const float R = 0.15f;
+const float R = 0.60f;
 
 //ESP32からの速度指令を受け取るための箱
 char rxBuf[64];
@@ -73,15 +73,21 @@ float motor_speed_B = 0.0f;
 float motor_speed_C = 0.0f;
 float motor_speed_D = 0.0f;
 
-//C610へ送る電流指令
-int16_t current_A = 0;
-int16_t current_B = 0;
-int16_t current_C = 0;
-int16_t current_D = 0;
+//電流地
+uint8_t TxData[8];
 
-//CAN送信用の変数
-FDCAN_TxHeaderTypeDef txHeader;
-uint8_t TxData[8]; //送信用のデータ
+//PID制御のための変数
+typedef struct {
+  uint16_t CANID;
+  float trgVel;
+  int16_t actVel;
+  int16_t p_actVel;
+  float hensa;
+  float ind;
+  int16_t cu; 
+} Robomas_t;
+Robomas_t robomas[4];
+
 
 /* USER CODE END PV */
 
@@ -165,26 +171,56 @@ HAL_StatusTypeDef motor_CAN_RxTxSettings_init(FDCAN_TxHeaderTypeDef *Htxheader)
   return HAL_OK;
 }
 
-// void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs){
-// 	if ((RxFifo0ITs & FDCAN_IT_RX_FIFO0_NEW_MESSAGE) != RESET) {
+void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs){
+ 	if ((RxFifo0ITs & FDCAN_IT_RX_FIFO0_NEW_MESSAGE) != RESET) {
 
-//     /* Retrieve Rx messages from RX FIFO0 */
-// 		uint8_t RxData_motor[8] = {};
-//     FDCAN_RxHeaderTypeDef RxHeader_motor;
-// 		if (HAL_OK != HAL_FDCAN_GetRxMessage(&hfdcan3, FDCAN_RX_FIFO0, &RxHeader_motor, RxData_motor)) {
-// 			printf("fdcan_getrxmessage_motor is error\r\n");
-// 			Error_Handler();
-// 		}
-// 		/*receive robomas's status*/
-// 		for (int i=0; i < 8; i++){
-// 			if (RxHeader_motor.Identifier == (robomas[i].CANID)) {
-// 				robomas[i].actangle = (int16_t)((RxData_motor[0] << 8) | RxData_motor[1]);
-// 				robomas[i].actVel = (int16_t)((RxData_motor[2] << 8) | RxData_motor[3]);
-// 				robomas[i].actCurrent = (int16_t)((RxData_motor[4] << 8) | RxData_motor[5]);
-// 			}
-// 		}
-// 	}
-// }
+    /* Retrieve Rx messages from RX FIFO0 */
+		uint8_t RxData_motor[8] = {};
+    FDCAN_RxHeaderTypeDef RxHeader_motor;
+ 		if (HAL_OK != HAL_FDCAN_GetRxMessage(&hfdcan3, FDCAN_RX_FIFO0, &RxHeader_motor, RxData_motor)) {
+ 			printf("fdcan_getrxmessage_motor is error\r\n");
+ 			Error_Handler();
+ 		}
+		/*receive robomas's status*/
+ 		for (int i=0; i < 4; i++){
+ 			if (RxHeader_motor.Identifier == (robomas[i].CANID)) {
+ 				//robomas[i].actangle = (int16_t)((RxData_motor[0] << 8) | RxData_motor[1]);
+ 				robomas[i].actVel = (int16_t)((RxData_motor[2] << 8) | RxData_motor[3]);
+ 				//robomas[i].actCurrent = (int16_t)((RxData_motor[4] << 8) | RxData_motor[5]);
+ 			}
+ 		}
+ 	}
+}
+
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
+	
+	if (&htim6 == htim) {
+		float k_p = 7, k_i = 0.5, k_d = 0.01;
+		for (int i = 0; i < 4; i++){
+			robomas[i].hensa = robomas[i].trgVel - robomas[i].actVel;
+			if (robomas[i].hensa >= 1000) robomas[i].hensa = 1000;
+			else if (robomas[i].hensa <= -1000) robomas[i].hensa = -1000;
+			float d = (robomas[i].actVel - robomas[i].p_actVel) / 0.001;
+			robomas[i].ind += robomas[i].hensa*0.1;
+			if (d >= 30000) d = 30000;
+			else if (d <= -30000) d = -30000;
+			if (robomas[i].ind >= 10000) robomas[i].ind = 10000;
+			else if (robomas[i].ind <= -10000) robomas[i].ind = -10000;
+
+
+			float t = k_p*robomas[i].hensa;
+			if (t>=10000) t = 10000;
+			else if (t<=-10000) t = -10000;
+			robomas[i].cu = (int16_t)(t+k_i*robomas[i].ind+k_d*d);
+			if (robomas[i].cu <= -10000) robomas[i].cu = -10000;
+			else if (robomas[i].cu >= 10000) robomas[i].cu = 10000;
+
+			robomas[i].p_actVel = robomas[i].actVel;
+
+		}
+    SendMotorCurrent(robomas[0].cu, robomas[1].cu, robomas[2].cu, robomas[3].cu);
+	}
+}
 /* USER CODE END 0 */
 
 /**
@@ -225,14 +261,27 @@ int main(void)
   //講習にて導入　 
   __HAL_RCC_CLEAR_RESET_FLAGS(); // Clear reset flags
   if (HAL_OK != motor_CAN_RxTxSettings_init(&TxHeader_motor)) Error_Handler();
-
+  //モーターのCANIDを設定
+  robomas[0].CANID = 0x201;
+  robomas[1].CANID = 0x202;
+  robomas[2].CANID = 0x203;
+  robomas[3].CANID = 0x204;
+  //一応初期化
+  for (int i = 0; i < 4; i++){
+    robomas[i].trgVel = 0;
+    robomas[i].actVel = 0;
+    robomas[i].p_actVel = 0;
+    robomas[i].hensa = 0;
+    robomas[i].ind = 0;
+    robomas[i].cu = 0;
+  }
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-    uint8_t txdata[8] = {0 ,1 ,2,3,4,5,6,7}; // Example data to send
+    /*uint8_t txdata[8] = {0 ,1 ,2,3,4,5,6,7}; // Example data to send
     int16_t cu = 842; // Example current value
     txdata[0] = (uint8_t)(cu >> 8);
     txdata[1] = (uint8_t)(cu & 0xFF);
@@ -244,7 +293,12 @@ int main(void)
     txdata[7] = (uint8_t)(cu & 0xFF);
     CAN_SEND(0x200, txdata, &hfdcan3, &TxHeader_motor); // Send CAN message
     HAL_Delay(100);
-
+    */
+   Vx = 1.0f;
+   Vy = 0.0f;
+   omega = 0.0f;  //0.6くらいを想定している
+   OmniKinematics();
+   HAL_Delay(100);
     
     /* USER CODE END WHILE */
 
@@ -479,12 +533,11 @@ void OmniKinematics(void){
     motor_speed_C /= max_speed;
     motor_speed_D /= max_speed;
   }
-  //電流値に変換
-  current_A = (int16_t)(motor_speed_A * 10000.0f);
-  current_B = (int16_t)(motor_speed_B * 10000.0f);
-  current_C = (int16_t)(motor_speed_C * 10000.0f);
-  current_D = (int16_t)(motor_speed_D * 10000.0f);
-
+  //PIDにtrgVelを渡す
+  robomas[0].trgVel = motor_speed_A*3000;
+  robomas[1].trgVel = motor_speed_B*3000;
+  robomas[2].trgVel = motor_speed_C*3000;
+  robomas[3].trgVel = motor_speed_D*3000;
 }
 
 //ESP32からの速度指令を受け取るためのUART割り込みコールバック関数
@@ -507,40 +560,35 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
 
 //電流値の送信関数
 void SendMotorCurrent(
-  int16_t current_A,
-  int16_t current_B,
-  int16_t current_C,
-  int16_t current_D)
+    int16_t current_A,
+    int16_t current_B,
+    int16_t current_C,
+    int16_t current_D)
 {
-  txHeader.Identifier = 0x200; // CAN ID
-  txHeader.IdType = FDCAN_STANDARD_ID; // Standard ID
-  txHeader.TxFrameType = FDCAN_DATA_FRAME; // Data frame
-  txHeader.DataLength = FDCAN_DLC_BYTES_8; // Data length code
-  txHeader.ErrorStateIndicator = FDCAN_ESI_ACTIVE; // Error state indicator
-  txHeader.BitRateSwitch = FDCAN_BRS_OFF; // Bit rate switching
-  txHeader.FDFormat = FDCAN_CLASSIC_CAN; // Classic CAN format
-  txHeader.TxEventFifoControl = FDCAN_NO_TX_EVENTS; // No Tx events
-  txHeader.MessageMarker = 0; // Message marker
+    TxData[0] = (current_A >> 8) & 0xFF;
+    TxData[1] = current_A & 0xFF;
 
-  TxData[0] = (current_A >> 8) & 0xFF;
-  TxData[1] = current_A & 0xFF;
+    TxData[2] = (current_B >> 8) & 0xFF;
+    TxData[3] = current_B & 0xFF;
 
-  TxData[2] = (current_B >> 8) & 0xFF;
-  TxData[3] = current_B & 0xFF;
+    TxData[4] = (current_C >> 8) & 0xFF;
+    TxData[5] = current_C & 0xFF;
 
-  TxData[4] = (current_C >> 8) & 0xFF;
-  TxData[5] = current_C & 0xFF;
+    TxData[6] = (current_D >> 8) & 0xFF;
+    TxData[7] = current_D & 0xFF;
 
-  TxData[6] = (current_D >> 8) & 0xFF;
-  TxData[7] = current_D & 0xFF;
-
-  HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan3, &txHeader, TxData);
+    CAN_SEND(
+        0x200,
+        TxData,
+        &hfdcan3,
+        &TxHeader_motor
+    );
 }
 
-void HAL_FDCAN_RxFifo1Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo1ITs){
+
+/*void HAL_FDCAN_RxFifo1Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo1ITs){
 	if (RESET != (RxFifo1ITs & FDCAN_IT_RX_FIFO1_NEW_MESSAGE)) {
 
-      //* Retrieve Rx messages from RX FIFO1 */
 		uint8_t RxData[64] = {};
     FDCAN_RxHeaderTypeDef RxHeader;
 		if (HAL_OK != HAL_FDCAN_GetRxMessage(&hfdcan3, FDCAN_RX_FIFO1, &RxHeader, RxData)) {
@@ -579,7 +627,7 @@ void interboard_comms_CAN_txheader_init(FDCAN_TxHeaderTypeDef *Htxheader)
   Htxheader->TxEventFifoControl = FDCAN_NO_TX_EVENTS;
   Htxheader->MessageMarker = 0;
 }
-
+*/
 
 
 
