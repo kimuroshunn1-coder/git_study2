@@ -1,0 +1,6 @@
+C:/Users/kimur_6ppyla1/f3rc2026_practice/build/Debug/CMakeFiles/f3rc2026_practice.dir
+C:/Users/kimur_6ppyla1/f3rc2026_practice/build/Debug/CMakeFiles/edit_cache.dir
+C:/Users/kimur_6ppyla1/f3rc2026_practice/build/Debug/CMakeFiles/rebuild_cache.dir
+C:/Users/kimur_6ppyla1/f3rc2026_practice/build/Debug/cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir
+C:/Users/kimur_6ppyla1/f3rc2026_practice/build/Debug/cmake/stm32cubemx/CMakeFiles/edit_cache.dir
+C:/Users/kimur_6ppyla1/f3rc2026_practice/build/Debug/cmake/stm32cubemx/CMakeFiles/rebuild_cache.dir

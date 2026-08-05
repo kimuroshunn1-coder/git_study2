@@ -1,0 +1,8 @@
+{
+	"InstallScripts" : 
+	[
+		"C:/Users/kimur_6ppyla1/f3rc2026_practice/build/Debug/cmake_install.cmake",
+		"C:/Users/kimur_6ppyla1/f3rc2026_practice/build/Debug/cmake/stm32cubemx/cmake_install.cmake"
+	],
+	"Parallel" : false
+}
