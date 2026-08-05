@@ -242,13 +242,5 @@ void FDCAN3_IT1_IRQHandler(void)
 }
 
 /* USER CODE BEGIN 1 */
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
-{
-  if (htim->Instance == TIM6) // Check if the interrupt is from TIM6
-  {
-    // Toggle the LED pin
-    //HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
-  }
-}
 
 /* USER CODE END 1 */

@@ -56,7 +56,7 @@ volatile float Vy = 0.0f;
 volatile float omega = 0.0f;
 
 //車体中心からオムニまでの長さ
-const float R = 0.60f;
+const float R = 0.21f;
 
 //ESP32からの速度指令を受け取るための箱
 char rxBuf[64];
@@ -195,13 +195,13 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
 	
 	if (&htim6 == htim) {
-		float k_p = 7, k_i = 0.5, k_d = 0.01;
+		float k_p = 7, k_i = 0.5, k_d = 0.1;
 		for (int i = 0; i < 4; i++){
 			robomas[i].hensa = robomas[i].trgVel - robomas[i].actVel;
 			if (robomas[i].hensa >= 1000) robomas[i].hensa = 1000;
 			else if (robomas[i].hensa <= -1000) robomas[i].hensa = -1000;
-			float d = (robomas[i].actVel - robomas[i].p_actVel) / 0.001;
-			robomas[i].ind += robomas[i].hensa*0.1;
+			float d = (robomas[i].p_actVel - robomas[i].actVel) / 0.001f;
+			robomas[i].ind += robomas[i].hensa*0.001f;
 			if (d >= 30000) d = 30000;
 			else if (d <= -30000) d = -30000;
 			if (robomas[i].ind >= 10000) robomas[i].ind = 10000;
@@ -294,9 +294,9 @@ int main(void)
     CAN_SEND(0x200, txdata, &hfdcan3, &TxHeader_motor); // Send CAN message
     HAL_Delay(100);
     */
-   Vx = 1.0f;
-   Vy = 0.0f;
-   omega = 0.0f;  //0.6くらいを想定している
+   Vx = 0.0;
+   Vy = 0.0;
+   omega = 0.0;  //1.0くらいを想定している
    OmniKinematics();
    HAL_Delay(100);
     
